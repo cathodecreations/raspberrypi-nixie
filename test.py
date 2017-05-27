@@ -82,22 +82,24 @@ def mpcString():
 
 def dateTimeString():
 #	nixieString( datetime.now().strftime(" %H%M ") )
+	TIME_DATE_MAX_OFFSET = len(" HHMMSS CCYY MM DD      ") - 6
 	timeStamp = datetime.now(tz)
-	if timeStamp.second == 13 and  dateTimeString.offset == 0 :
-		dateTimeString.offset=1
-		dateTimeString.frame = 0
-	if dateTimeString.offset != 0:
+	if dateTimeString.offset > 0 and dateTimeString.offset <= TIME_DATE_MAX_OFFSET:
 		x = timeStamp.strftime(" %H%M%S %Y %m %d      ")
-		if dateTimeString.offset > (len(x) - 6):
-			dateTimeString.offset=0
-		elif dateTimeString.frame > 15:
+		if dateTimeString.frame > 15:
 			dateTimeString.offset += dateTimeString.direction
 			dateTimeString.frame = 0
+	elif timeStamp.second == 13:
+		x = timeStamp.strftime(" %H%M%S %Y %m %d      ")
+		dateTimeString.offset=1
+		dateTimeString.frame = 0
 	elif timeStamp.microsecond < 500000:
 #		x = timeStamp.strftime("%Y%m%d %H%M%S%f") 
 		x = timeStamp.strftime("%H%M%S") 
+		dateTimeString.offset=0
 	else:
 		x = timeStamp.strftime("%H%M  ") 
+		dateTimeString.offset=0
 #		x = timeStamp.strftime("%Y%m%d %H%M%S%f") 
 #	if dateTimeString.offset > (len(x) - 9):
 #		dateTimeString.offset=(len(x) - 9)
