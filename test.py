@@ -1,56 +1,36 @@
 #!/usr/bin/python
 
 #import modules
-import sys
-import time
+from time import sleep
 import RPi.GPIO as GPIO
-import xml.etree.ElementTree as ET
-import os
-from os import system
+from subprocess import check_output, call
+from datetime import datetime, date
+from pytz import timezone
 
 #Number of active Nixie Tubes
 tubes = 6
-
-#Decimal to Binary function
-def d2b(y):
-#	return bin(int(y))[2:]
-        return d2b(y/2) + [y%2] if y > 1 else [y]
+tz = timezone('US/Eastern')
 
 #Send a pulse out the indicated strobe pin
-def pulseGPIO(pin):
-	GPIO.output(pin, True)
-	time.sleep(0.001)
-	GPIO.output(pin, False)
+def pulseGPIO(pin, direction=True, duration=0.001):
+	GPIO.output(pin, direction)
+	sleep(duration)
+	GPIO.output(pin, not(direction))
 
 
 #Display digits on Nixies, bit by bit
 def nixiebit(digit):
 	digit = int(max(0, min( int(digit), 15)))
-	for d in range (3, -1, -1):
+	for d in reversed(range (0, 4)):
 		GPIO.output(11, bool(digit & (1 << d)) )
 		pulseGPIO(12)
-#	digitbin = d2b(x)
-#	#print digitbin
-#	arrsize = len(digitbin)	
-#	for d in range (0, 4-arrsize):
-#		GPIO.output(11, False)
-#		pulseGPIO(12)
-#		#print 'Wrote: 0 {EOD}'
-#	for d in range (0, min(arrsize,4)):
-##		GPIO.output(11, digitbin[d] == '1')
-#		GPIO.output(11, bool(digitbin[d]))
-#		pulseGPIO(12)
-#		#print 'Wrote: ',digitbin[d]
 
 
 #Display String of digits
-def nixieString(x):
-	digitString = str(x)
-	lastIndex = len(digitString) - 1
-	#print "Number length: ",i
-	for i in range(lastIndex, -1, -1):
+def nixieString(digitString):
+	for c in reversed(str(digitString)):
 		try:
-			nixiebit(int(digitString[i]))
+			nixiebit(int(c))
 		except ValueError:
 			nixiebit(15)
 	#Display number on Nixies
@@ -60,7 +40,7 @@ def nixieString(x):
 
 #Ask User for string to display
 def userNixieString():
-	userInput = str(raw_input('Number to Display: '))
+	userInput = str(raw_input('Number to Display ( or "exit" ) : '))
 	if userInput == 'exit':
 		return False
 	print tubes
@@ -76,14 +56,67 @@ def sweepNixieString():
 			x=emptyString[:i] + digit + emptyString[i:]
 			#print x
 			nixieString(x)
-			time.sleep(0.1)
+			sleep(0.1)
 		for i in range (tubes-2, 0, -1):
 			x=emptyString[:i] + digit + emptyString[i:]
 			#print x
 			nixieString(x)
-			time.sleep(0.1)
+			sleep(0.1)
 	return True
 
+
+
+def mpcString():
+	output = check_output(["/usr/bin/mpc", "status"])
+	x = output.splitlines()
+	y = x[1].split()
+	if (y[0] != "[playing]" ):
+		return dateTimeString()
+	z=y[3].strip("(%)").rjust(2,"0") + y[2].split("/", 2)[1].replace(":","").rjust(4," ")
+	#print z
+	nixieString(z)
+	sleep(0.1)
+	return True
+	
+
+
+def dateTimeString():
+#	nixieString( datetime.now().strftime(" %H%M ") )
+	timeStamp = datetime.now(tz)
+	if timeStamp.second == 13 and  dateTimeString.offset == 0 :
+		dateTimeString.offset=1
+		dateTimeString.frame = 0
+	if dateTimeString.offset != 0:
+		x = timeStamp.strftime(" %H%M%S %Y %m %d      ")
+		if dateTimeString.offset > (len(x) - 6):
+			dateTimeString.offset=0
+		elif dateTimeString.frame > 15:
+			dateTimeString.offset += dateTimeString.direction
+			dateTimeString.frame = 0
+	elif timeStamp.microsecond < 500000:
+#		x = timeStamp.strftime("%Y%m%d %H%M%S%f") 
+		x = timeStamp.strftime("%H%M%S") 
+	else:
+		x = timeStamp.strftime("%H%M  ") 
+#		x = timeStamp.strftime("%Y%m%d %H%M%S%f") 
+#	if dateTimeString.offset > (len(x) - 9):
+#		dateTimeString.offset=(len(x) - 9)
+#		dateTimeString.direction=-1
+#		dateTimeString.frame = -12
+#	elif dateTimeString.offset < 0:
+#		dateTimeString.offset=0
+#		dateTimeString.direction=1
+#		dateTimeString.frame = -6
+#	#dateTimeString.offset=(len(x) - 9)
+#	dateTimeString.offset=0
+	nixieString( x[dateTimeString.offset:dateTimeString.offset+6] )
+	sleep(0.1)
+	dateTimeString.frame += 10
+	return True;
+
+dateTimeString.offset = 0
+dateTimeString.direction = 1
+dateTimeString.frame = 0
 
 #init the GPIO pins
 GPIO.setwarnings(False)
@@ -98,7 +131,7 @@ GPIO.output(12, False)
 
 
 #I just have a thing for clean screens...
-system("clear")
+call("clear")
 
 emptyString='     '
 keepLooping=True;
@@ -106,8 +139,10 @@ print 'Hit Ctrl-C to Exit'
 try:
 	while keepLooping:
 		#keepLooping=sweepNixieString()
-		keepLooping=userNixieString()
-except:
+		#keepLooping=dateTimeString()
+		keepLooping=mpcString()
+		#keepLooping=userNixieString()
+except KeyboardInterrupt:
 	# Do normal cleanup
 	print "Exception detected"
 
@@ -115,7 +150,7 @@ except:
 nixieString('aaaaaa')
 print "Exiting..."
 GPIO.cleanup()
-#system("clear")
+#call("clear")
 
 
 	
