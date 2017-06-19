@@ -1,15 +1,27 @@
 #!/usr/bin/python
 
 #import modules
+import socket
 from time import sleep
 import RPi.GPIO as GPIO
-from subprocess import check_output, call
+from subprocess import check_output, call, CalledProcessError
 from datetime import datetime, date
 from pytz import timezone
 
+try:
+	from mpd import MPDClient, ConnectionError
+	mpdClient = MPDClient()
+except ImportError:
+	print 'python-mpd not installed disabling mpdsupport'
+	mpdClient = None
+
 #Number of active Nixie Tubes
 tubes = 6
-tz = timezone('US/Eastern')
+TZ = timezone('US/Eastern')
+MPD_HOST = "localhost"
+MPD_PORT = "6600"
+FRAME_TIME = 0.1
+
 
 #Send a pulse out the indicated strobe pin
 def pulseGPIO(pin, direction=True, duration=0.001):
@@ -65,25 +77,59 @@ def sweepNixieString():
 	return True
 
 
+def mpcString(client):
+	if(client):
+		if (mpcString.mpcHoldoff > 0):
+			mpcString.mpcHoldoff -= 1
+			if (mpcString.mpcHoldoff <= 0):
+				try:
+					client.connect(MPD_HOST, MPD_PORT)
+				except socket.error:
+					print "Failed to reconnect MPD client"
+			return dateTimeString()
+		try:
+			status=client.status()
+			if(mpcString.oldVolume!=status['volume']):
+				mpcString.volumeDisplayTimer = 10
+				mpcString.oldVolume = status['volume']
+			if(mpcString.volumeDisplayTimer > 0):
+				mpcString.volumeDisplayTimer -= 1
+				nixieString("  "+status['volume'].rjust(2,"0")+"  ")
+				sleep(FRAME_TIME)
+				return True			
+			#print status
+			if(status['state']=="play"):
+				#volume = status['volume']
+				songid = status['songid']
+				timeFields = status['time'].split(":")
+				#elTime = int(timeFields[0])
+				elMin, elSec = divmod(int(timeFields[0]), 60)
+				#totTime = time(second=int(timeFields[1]))
+				digitString = songid.rjust(2,"0") + str(elMin).rjust(2," ") + str(elSec).rjust(2,"0")
+				#print digitString
+				nixieString(digitString)
+				sleep(FRAME_TIME)
+				return True
+		except (socket.error, ConnectionError):
+			print "ConnectionError"
+			mpcString.mpcHoldoff = 300
+			try:
+				client.disconnect()
+#				client.timeout = FRAME_TIME
+#				client.connect(MPD_HOST, MPD_PORT)
+			except (socket.error, ConnectionError):
+				print "Cleanup-ConnectionError"
+	return dateTimeString()
+mpcString.oldVolume = 0
+mpcString.volumeDisplayTimer = 0
+mpcString.mpcHoldoff = 1
 
-def mpcString():
-	output = check_output(["/usr/bin/mpc", "status"])
-	x = output.splitlines()
-	y = x[1].split()
-	if (y[0] != "[playing]" ):
-		return dateTimeString()
-	z=y[3].strip("(%)").rjust(2,"0") + y[2].split("/", 2)[1].replace(":","").rjust(4," ")
-	#print z
-	nixieString(z)
-	sleep(0.1)
-	return True
-	
-
+		
 
 def dateTimeString():
 #	nixieString( datetime.now().strftime(" %H%M ") )
 	TIME_DATE_MAX_OFFSET = len(" HHMMSS CCYY MM DD      ") - 6
-	timeStamp = datetime.now(tz)
+	timeStamp = datetime.now(TZ)
 	if dateTimeString.offset > 0 and dateTimeString.offset <= TIME_DATE_MAX_OFFSET:
 		x = timeStamp.strftime(" %H%M%S %Y %m %d      ")
 		if dateTimeString.frame > 15:
@@ -112,7 +158,7 @@ def dateTimeString():
 #	#dateTimeString.offset=(len(x) - 9)
 #	dateTimeString.offset=0
 	nixieString( x[dateTimeString.offset:dateTimeString.offset+6] )
-	sleep(0.1)
+	sleep(FRAME_TIME)
 	dateTimeString.frame += 10
 	return True;
 
@@ -133,16 +179,19 @@ GPIO.output(12, False)
 
 
 #I just have a thing for clean screens...
-call("clear")
+#call("clear")
 
 emptyString='     '
-keepLooping=True;
+keepLooping=True
 print 'Hit Ctrl-C to Exit'
 try:
+	if(mpdClient):
+		mpdClient.timeout = FRAME_TIME
+		#mpdClient.connect(MPD_HOST, MPD_PORT)
 	while keepLooping:
 		#keepLooping=sweepNixieString()
 		#keepLooping=dateTimeString()
-		keepLooping=mpcString()
+		keepLooping=mpcString(mpdClient)
 		#keepLooping=userNixieString()
 except KeyboardInterrupt:
 	# Do normal cleanup
@@ -151,6 +200,9 @@ except KeyboardInterrupt:
 #Cleanup...
 nixieString('aaaaaa')
 print "Exiting..."
+if(mpdClient):
+	mpdClient.close()
+	mpdClient.disconnect()
 GPIO.cleanup()
 #call("clear")
 
