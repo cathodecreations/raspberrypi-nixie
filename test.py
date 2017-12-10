@@ -14,33 +14,31 @@ gpioParallelLoad = 8
 
 
 #Send a pulse out the indicated strobe pin
-def pulseGPIO(pin):
-	GPIO.output(pin, True)
-	time.sleep(0.001)
-	GPIO.output(pin, False)
+def pulseGPIO(pin, direction=True, duration=0.001):
+	GPIO.output(pin, direction)
+	time.sleep(duration)
+	GPIO.output(pin, not(direction))
 
 
 #Display digits on Nixies, bit by bit
 def nixiebit(digit):
 	digit = int(max(0, min( int(digit), 15)))
-	for d in range (3, -1, -1):
+	for d in reversed(range (0, 4)):
 		GPIO.output(gpioData, bool(digit & (1 << d)) )
 		pulseGPIO(gpioSerialClock)
 
+
 #Display String of digits
-def nixieString(x):
-	digitString = str(x)
-	lastIndex = len(digitString) - 1
-	#print "Number length: ",i
-	for i in range(lastIndex, -1, -1):
+def nixieString(digitString):
+	for c in reversed(str(digitString)):
 		try:
-			nixiebit(int(digitString[i]))
+			nixiebit(int(c))
 		except ValueError:
 			nixiebit(15)
 	#Display number on Nixies
 	pulseGPIO(gpioParallelLoad)
 	#print 'Outputted to Nixies'
-	
+
 
 #Ask User for string to display
 def userNixieString():
