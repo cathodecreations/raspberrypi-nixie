@@ -51,8 +51,10 @@ def userNixieString():
 	nixieString(nixienumber)
 	return True
 
+
 #Sweep Counting nixie display
 def sweepNixieString():
+	emptyString=' ' * (tubes - 1)
 	for digit in '1234567890':
 		for i in range (0,tubes):
 			x=emptyString[:i] + digit + emptyString[i:]
@@ -80,20 +82,18 @@ def nixieInit():
 	GPIO.output(gpioData, False)
 
 
-
 if __name__=="__main__":
 	nixieInit()
 
 	#I just have a thing for clean screens...
 	system("clear")
 
-	emptyString=' ' * (tubes - 1)
 	keepLooping=True
 	print 'Hit Ctrl-C to Exit'
 	try:
 		while keepLooping:
-			keepLooping=sweepNixieString()
-			#keepLooping=userNixieString()
+			#keepLooping=sweepNixieString()
+			keepLooping=userNixieString()
 	except:
 		# Do normal cleanup
 		print "Exception detected"
@@ -103,6 +103,3 @@ if __name__=="__main__":
 	print "Exiting..."
 	GPIO.cleanup()
 	#system("clear")
-
-
-	
