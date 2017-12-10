@@ -1,20 +1,17 @@
 #!/usr/bin/python
 
-#import modules
-import sys
 import time
 import RPi.GPIO as GPIO
-import xml.etree.ElementTree as ET
-import os
 from os import system
 
 #Number of active Nixie Tubes
 tubes = 6
 
-#Decimal to Binary function
-def d2b(y):
-#	return bin(int(y))[2:]
-        return d2b(y/2) + [y%2] if y > 1 else [y]
+# GPIO mapping
+gpioData = 11
+gpioSerialClock = 12
+gpioParallelLoad = 8
+
 
 #Send a pulse out the indicated strobe pin
 def pulseGPIO(pin):
@@ -27,21 +24,8 @@ def pulseGPIO(pin):
 def nixiebit(digit):
 	digit = int(max(0, min( int(digit), 15)))
 	for d in range (3, -1, -1):
-		GPIO.output(11, bool(digit & (1 << d)) )
-		pulseGPIO(12)
-#	digitbin = d2b(x)
-#	#print digitbin
-#	arrsize = len(digitbin)	
-#	for d in range (0, 4-arrsize):
-#		GPIO.output(11, False)
-#		pulseGPIO(12)
-#		#print 'Wrote: 0 {EOD}'
-#	for d in range (0, min(arrsize,4)):
-##		GPIO.output(11, digitbin[d] == '1')
-#		GPIO.output(11, bool(digitbin[d]))
-#		pulseGPIO(12)
-#		#print 'Wrote: ',digitbin[d]
-
+		GPIO.output(gpioData, bool(digit & (1 << d)) )
+		pulseGPIO(gpioSerialClock)
 
 #Display String of digits
 def nixieString(x):
@@ -54,7 +38,7 @@ def nixieString(x):
 		except ValueError:
 			nixiebit(15)
 	#Display number on Nixies
-	pulseGPIO(8)
+	pulseGPIO(gpioParallelLoad)
 	#print 'Outputted to Nixies'
 	
 
@@ -86,36 +70,41 @@ def sweepNixieString():
 
 
 #init the GPIO pins
-GPIO.setwarnings(False)
-GPIO.setmode(GPIO.BOARD)
-GPIO.setup(8, GPIO.OUT)
-GPIO.setup(11, GPIO.OUT)
-GPIO.setup(12, GPIO.OUT)
+def nixieInit():
+	GPIO.setwarnings(False)
+	GPIO.setmode(GPIO.BOARD)
+	GPIO.setup(gpioParallelLoad, GPIO.OUT)
+	GPIO.setup(gpioSerialClock, GPIO.OUT)
+	GPIO.setup(gpioData, GPIO.OUT)
 
-GPIO.output(8, False)
-GPIO.output(11, False)
-GPIO.output(12, False)
+	GPIO.output(gpioParallelLoad, False)
+	GPIO.output(gpioSerialClock, False)
+	GPIO.output(gpioData, False)
 
 
-#I just have a thing for clean screens...
-system("clear")
 
-emptyString='     '
-keepLooping=True;
-print 'Hit Ctrl-C to Exit'
-try:
-	while keepLooping:
-		#keepLooping=sweepNixieString()
-		keepLooping=userNixieString()
-except:
-	# Do normal cleanup
-	print "Exception detected"
+if __name__=="__main__":
+	nixieInit()
 
-#Cleanup...
-nixieString('aaaaaa')
-print "Exiting..."
-GPIO.cleanup()
-#system("clear")
+	#I just have a thing for clean screens...
+	system("clear")
+
+	emptyString=' ' * (tubes - 1)
+	keepLooping=True
+	print 'Hit Ctrl-C to Exit'
+	try:
+		while keepLooping:
+			keepLooping=sweepNixieString()
+			#keepLooping=userNixieString()
+	except:
+		# Do normal cleanup
+		print "Exception detected"
+
+	#Cleanup...
+	nixieString('a' * tubes)
+	print "Exiting..."
+	GPIO.cleanup()
+	#system("clear")
 
 
 	
