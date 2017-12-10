@@ -1,86 +1,105 @@
 #!/usr/bin/python
 
-#import modules
-import sys
 import time
 import RPi.GPIO as GPIO
-import xml.etree.ElementTree as ET
-import os
 from os import system
-
-#Decimal to Binary function
-def d2b(y):
-        return d2b(y/2) + [y%2] if y > 1 else [y]
-
-#Display digits on Nixies, bit by bit
-def nixiebit(x):
-	digitbin = d2b(x)
-	while len(digitbin) < 4:
-		digitbin.insert(0,0)
-	print digitbin
-	d = 0
-	digit = 1
-	arrsize = len(digitbin)
-	while digit <= 4:
-		if d < arrsize:
-			GPIO.output(11, bool(digitbin[d]))
-			GPIO.output(12, True)
-			time.sleep(0.001)
-			GPIO.output(12, False)
-			#print 'Wrote: ',digitbin[d]
-			d+=1
-		else:
-			GPIO.output(11, False)
-                        GPIO.output(12, True)
-			time.sleep(0.001)
-                        GPIO.output(12, False)
-			#print 'Wrote: 0 {EOD}'
-		digit+=1
-
-#init the GPIO pins
-GPIO.setwarnings(False)
-GPIO.setmode(GPIO.BOARD)
-GPIO.setup(8, GPIO.OUT)
-GPIO.setup(11, GPIO.OUT)
-GPIO.setup(12, GPIO.OUT)
-
-GPIO.output(8, False)
-GPIO.output(11, False)
-GPIO.output(12, False)
 
 #Number of active Nixie Tubes
 tubes = 6
 
-#I just have a thing for clean screens...
-system("clear")
+# GPIO mapping
+gpioData = 11
+gpioSerialClock = 12
+gpioParallelLoad = 8
 
-#Get Number
-while 1:
-        try:
-		nixienumber = str(raw_input('Numer to Display: ')).rjust(tubes,'a')
-		print tubes
-		print str(nixienumber)
-		if nixienumber == 'exit':
-			#Cleanup...
-			print "Exiting..."
-			GPIO.cleanup()
-			sys.exit()
-		i = (len(str(nixienumber))) - 1
-		#print "Number length: ",i
-		while i >= 0:
-			try:
-				nixiebit(int(str(nixienumber)[i]))
-			except ValueError:
-				nixiebit(15)
-			i-=1
-		#Display number on Nixies
-		GPIO.output(8, True)
-		time.sleep(0.001)
-		GPIO.output(8, False)
-		#print 'Outputted to Nixies'
-        except KeyboardInterrupt:
-                print "Exiting..."
-                #Cleanup...
-                GPIO.cleanup()
-		system("clear")
-                break
+
+#Send a pulse out the indicated strobe pin
+def pulseGPIO(pin, direction=True, duration=0.001):
+	GPIO.output(pin, direction)
+	time.sleep(duration)
+	GPIO.output(pin, not(direction))
+
+
+#Display digits on Nixies, bit by bit
+def nixiebit(digit):
+	digit = int(max(0, min( int(digit), 15)))
+	for d in reversed(range (0, 4)):
+		GPIO.output(gpioData, bool(digit & (1 << d)) )
+		pulseGPIO(gpioSerialClock)
+
+
+#Display String of digits
+def nixieString(digitString):
+	for c in reversed(str(digitString)):
+		try:
+			nixiebit(int(c))
+		except ValueError:
+			nixiebit(15)
+	#Display number on Nixies
+	pulseGPIO(gpioParallelLoad)
+	#print 'Outputted to Nixies'
+
+
+#Ask User for string to display
+def userNixieString():
+	userInput = str(raw_input('Number to Display: '))
+	if userInput == 'exit':
+		return False
+	print tubes
+	nixienumber = userInput.rjust(tubes,'a')
+	print nixienumber
+	nixieString(nixienumber)
+	return True
+
+
+#Sweep Counting nixie display
+def sweepNixieString():
+	emptyString=' ' * (tubes - 1)
+	for digit in '1234567890':
+		for i in range (0,tubes):
+			x=emptyString[:i] + digit + emptyString[i:]
+			#print x
+			nixieString(x)
+			time.sleep(0.1)
+		for i in range (tubes-2, 0, -1):
+			x=emptyString[:i] + digit + emptyString[i:]
+			#print x
+			nixieString(x)
+			time.sleep(0.1)
+	return True
+
+
+#init the GPIO pins
+def nixieInit():
+	GPIO.setwarnings(False)
+	GPIO.setmode(GPIO.BOARD)
+	GPIO.setup(gpioParallelLoad, GPIO.OUT)
+	GPIO.setup(gpioSerialClock, GPIO.OUT)
+	GPIO.setup(gpioData, GPIO.OUT)
+
+	GPIO.output(gpioParallelLoad, False)
+	GPIO.output(gpioSerialClock, False)
+	GPIO.output(gpioData, False)
+
+
+if __name__=="__main__":
+	nixieInit()
+
+	#I just have a thing for clean screens...
+	system("clear")
+
+	keepLooping=True
+	print 'Hit Ctrl-C to Exit'
+	try:
+		while keepLooping:
+			#keepLooping=sweepNixieString()
+			keepLooping=userNixieString()
+	except:
+		# Do normal cleanup
+		print "Exception detected"
+
+	#Cleanup...
+	nixieString('a' * tubes)
+	print "Exiting..."
+	GPIO.cleanup()
+	#system("clear")
